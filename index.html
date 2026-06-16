@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Memory Match v1.3.0</title>
+<script src="https://telegram.org/js/telegram-web-app.js" async></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fce4ec;font-family:Arial,sans-serif;text-align:center;padding:16px;height:100vh;height:-webkit-fill-available;overflow-y:auto}
+.ver{position:fixed;top:4px;right:8px;font-size:10px;color:#aaa;z-index:99}
+h1{color:#5c6bc0;margin-bottom:8px;font-size:22px}
+.stats{color:#78909c;margin-bottom:16px;font-size:16px}
+.stats span{color:#5c6bc0;font-weight:bold}
+.board{display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;width:312px;margin:0 auto}
+.card{width:70px;height:70px;margin:4px;border-radius:12px;cursor:pointer;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent}
+.card-inner{width:100%;height:100%;position:relative;-webkit-transition:all 0.5s;transition:all 0.5s;-webkit-transform-style:preserve-3d;transform-style:preserve-3d}
+.card.flipped .card-inner{-webkit-transform:rotateY(180deg);transform:rotateY(180deg)}
+.card-front,.card-back{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:12px;text-align:center;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.card-front{background:#7c4dff;background:-webkit-linear-gradient(top,#7c4dff,#536dfe);background:linear-gradient(145deg,#7c4dff,#536dfe);color:#fff;font-size:28px;font-weight:bold;line-height:70px}
+.card-back{background:#fff;font-size:32px;border:3px solid #e8eaf6;-webkit-transform:rotateY(180deg);transform:rotateY(180deg);line-height:64px}
+.card.matched .card-back{background:#e8f5e9;border-color:#a5d6a7}
+.card.matched{pointer-events:none}
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10}
+.modal-bg.show{display:block}
+.modal{display:none;position:fixed;top:50%;left:50%;margin-left:-140px;margin-top:-120px;background:#fff;border-radius:20px;padding:32px 28px;text-align:center;width:280px;z-index:11;box-shadow:0 20px 60px rgba(0,0,0,0.2)}
+.modal h2{color:#5c6bc0;margin-bottom:8px;font-size:20px}
+.modal p{color:#78909c;margin-bottom:20px;line-height:1.5;font-size:14px}
+.modal button{background:#7c4dff;background:-webkit-linear-gradient(top,#7c4dff,#536dfe);background:linear-gradient(145deg,#7c4dff,#536dfe);color:#fff;border:none;padding:12px 32px;border-radius:30px;font-size:16px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="ver">v1.3.0</div>
+<h1>Memory Match</h1>
+<div class="stats">Ходов: <span id="moves">0</span></div>
+<div class="board" id="board"></div>
+<div class="modal-bg" id="modalBg"></div>
+<div class="modal" id="modal">
+<h2>Поздравляем!</h2>
+<p>Вы нашли все пары за <span id="finalMoves">0</span> ходов!</p>
+<button onclick="restart()">Играть снова</button>
+</div>
+<script>
+try{var tg=window.Telegram&&window.Telegram.WebApp;if(tg){tg.ready();tg.expand();setTimeout(function(){tg.expand()},500);setTimeout(function(){tg.expand()},1500);tg.onEvent('viewportChanged',function(){tg.expand()})}}catch(e){}
+
+var audioCtx=null;
+function getCtx(){if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)()}return audioCtx}
+function beep(freq,dur,type,vol){
+  try{
+    var c=getCtx(),o=c.createOscillator(),g=c.createGain();
+    o.type=type||'sine';o.frequency.value=freq;
+    g.gain.value=vol||0.15;
+    g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+    o.connect(g);g.connect(c.destination);
+    o.start(c.currentTime);o.stop(c.currentTime+dur);
+  }catch(e){}
+}
+function sndTap(){beep(800,0.08,'sine',0.12)}
+function sndMatch(){beep(523,0.15,'sine',0.15);setTimeout(function(){beep(659,0.15,'sine',0.15)},100);setTimeout(function(){beep(784,0.2,'sine',0.15)},200)}
+function sndWin(){beep(523,0.12,'sine',0.15);setTimeout(function(){beep(659,0.12,'sine',0.15)},120);setTimeout(function(){beep(784,0.12,'sine',0.15)},240);setTimeout(function(){beep(1047,0.3,'sine',0.18)},360)}
+
+var EMOJIS=['\uD83D\uDC36','\uD83D\uDC31','\uD83D\uDC2D','\uD83D\uDC39','\uD83D\uDC30','\uD83E\uDD8A','\uD83D\uDC3B','\uD83D\uDC3C'];
+var allCards=[];
+var flipped=[];
+var matched=0;
+var moves=0;
+var locked=false;
+
+function shuffle(a){
+  var i,j,t;
+  for(i=a.length-1;i>0;i--){
+    j=Math.floor(Math.random()*(i+1));
+    t=a[i];a[i]=a[j];a[j]=t;
+  }
+  return a;
+}
+
+function makeBoard(){
+  var b=document.getElementById('board');
+  b.innerHTML='';
+  var pair=EMOJIS.concat(EMOJIS);
+  shuffle(pair);
+  allCards=pair;
+  for(var i=0;i<16;i++){
+    var c=document.createElement('div');
+    c.className='card';
+    c.setAttribute('data-idx',i);
+    var inner=document.createElement('div');
+    inner.className='card-inner';
+    var front=document.createElement('div');
+    front.className='card-front';
+    front.innerHTML='?';
+    var back=document.createElement('div');
+    back.className='card-back';
+    back.innerHTML=pair[i];
+    inner.appendChild(front);
+    inner.appendChild(back);
+    c.appendChild(inner);
+    c.onclick=(function(card){
+      return function(){tap(card)}
+    })(c);
+    b.appendChild(c);
+  }
+}
+
+function tap(card){
+  if(locked)return;
+  if(card.className.indexOf('flipped')!==-1)return;
+  if(card.className.indexOf('matched')!==-1)return;
+  sndTap();
+  card.className='card flipped';
+  flipped.push(card);
+  if(flipped.length===2){
+    moves++;
+    document.getElementById('moves').innerHTML=moves;
+    locked=true;
+    var a=flipped[0];
+    var b=flipped[1];
+    var va=a.querySelector('.card-back').innerHTML;
+    var vb=b.querySelector('.card-back').innerHTML;
+    if(va===vb){
+      sndMatch();
+      a.className='card flipped matched';
+      b.className='card flipped matched';
+      matched+=2;
+      flipped=[];
+      locked=false;
+      if(matched===allCards.length){
+        sndWin();
+        setTimeout(function(){
+          document.getElementById('finalMoves').innerHTML=moves;
+          document.getElementById('modalBg').className='modal-bg show';
+          document.getElementById('modal').style.display='block';
+        },600);
+      }
+    }else{
+      setTimeout(function(){
+        a.className='card';
+        b.className='card';
+        flipped=[];
+        locked=false;
+      },900);
+    }
+  }
+}
+
+function restart(){
+  matched=0;
+  moves=0;
+  flipped=[];
+  locked=false;
+  document.getElementById('moves').innerHTML='0';
+  document.getElementById('modalBg').className='modal-bg';
+  document.getElementById('modal').style.display='none';
+  makeBoard();
+}
+
+window.onload=function(){makeBoard()};
+</script>
+</body>
+</html>
