@@ -50,6 +50,8 @@ try{var tg=window.Telegram&&window.Telegram.WebApp;if(tg){tg.ready();tg.expand()
 
 (function(){
   var greetingEl=document.getElementById('auth-greeting');
+  var debug='tg:'+(typeof tg)+' initUnsafe:'+(tg?typeof tg.initDataUnsafe:'no')+' user:'+(tg&&tg.initDataUnsafe?typeof tg.initDataUnsafe.user:'no');
+  greetingEl.textContent=debug;
   if(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user){
     var u=tg.initDataUnsafe.user;
     fetch('/api/login',{
@@ -63,7 +65,7 @@ try{var tg=window.Telegram&&window.Telegram.WebApp;if(tg){tg.ready();tg.expand()
       setRandomBg();makeBoard();
     });
   }else{
-    greetingEl.textContent='Добро пожаловать!';
+    greetingEl.textContent='Нет данных юзера | '+debug;
     setRandomBg();makeBoard();
   }
 })();
