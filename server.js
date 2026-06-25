@@ -32,6 +32,12 @@ app.post('/api/login', (req, res) => {
   res.json({ ok: true, greeting: `Привет, ${name}! Добро пожаловать!` });
 });
 
+app.get('/api/users', (req, res) => {
+  const { db } = require('./db');
+  const users = db.prepare('SELECT * FROM users').all();
+  res.json(users);
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
