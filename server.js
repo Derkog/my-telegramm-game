@@ -5,7 +5,7 @@ const { upsertUser } = require('./db');
 const { validateInitData, parseInitData } = require('./auth');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.TOKEN;
 
 app.use(express.json());
