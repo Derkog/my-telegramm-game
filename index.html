@@ -50,16 +50,14 @@ try{var tg=window.Telegram&&window.Telegram.WebApp;if(tg){tg.ready();tg.expand()
 
 (function(){
   var greetingEl=document.getElementById('auth-greeting');
-  console.log('initDataUnsafe:', tg?tg.initDataUnsafe:'no tg');
   if(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user){
     var u=tg.initDataUnsafe.user;
-    console.log('user:', u);
     fetch('/api/login',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({initData:tg.initData})
     }).then(function(r){return r.json()}).then(function(data){
-      if(data.ok){greetingEl.textContent=data.greeting}
+      greetingEl.textContent=data.greeting||('ID: '+u.id+' | name: '+u.first_name);
       setRandomBg();makeBoard();
     }).catch(function(){
       setRandomBg();makeBoard();
